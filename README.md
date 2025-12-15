@@ -51,10 +51,11 @@ CS2-YCY-Link 是一个创新的游戏联动系统，能够实时监听 CS2 游�
 
 1. **CS2 游戏** 通过 GSI (Game State Integration) 接口实时发送游戏状态
 2. **Python 后端** 解析游戏状态，检测事件触发条件
-3. **HTTP 调用** 后端调用 Node.js IM 服务发送指令
-4. **IM 发送** Node.js 服务通过腾讯云 IM SDK 发送指令
-5. **设备响应** YCY 设备接收指令并执行相应动作
-6. **前端监控** 前端通过 WebSocket 实时显示游戏状态和事件
+3. **WebSocket 通知** 后端通过 WebSocket 实时通知前端游戏事件
+4. **前端处理** 前端直接连接腾讯云 IM 并发送指令（Token 仅在前端存储，更安全）
+5. **IM 发送** 前端通过腾讯云 IM SDK 发送指令到 YCY 设备
+6. **设备响应** YCY 设备接收指令并执行相应动作
+7. **实时监控** 前端实时显示游戏状态、IM 连接状态和指令日志
 
 ---
 
@@ -224,7 +225,6 @@ pkg server.js --targets node18-win-x64 --output im-service.exe
 ```
 release/
 ├── backend.exe           # 后端可执行文件
-├── launcher.exe          # 启动器（可选）
 ├── launcher-portable.py  # Python 启动器
 ├── im-service/
 │   ├── server.js
@@ -283,7 +283,6 @@ build.bat
 - ✅ **自定义事件** - 支持创建自定义游戏事件和指令
 - ✅ **事件启用/禁用** - 灵活控制哪些事件需要触发
 - ✅ **WebSocket 实时通信** - 毫秒级的事件响应速度
-- ✅ **安全的 Token 管理** - Token 仅在前端存储，不经过后端
 
 ---
 
@@ -508,22 +507,6 @@ node server.js
 - [FastAPI](https://fastapi.tiangolo.com/) - 优秀的 Python Web 框架
 - [Vue.js](https://vuejs.org/) - 渐进式 JavaScript 框架
 - [Ant Design Vue](https://antdv.com/) - 企业级 UI 组件库
-
----
-
-## 🔄 更新日志
-
-### v1.0.0 (2025-12-16)
-
-**修复：**
-- 修复打包后前端访问不到后端的问题
-- 修正端口配置不一致（统一使用 8001）
-- 修复 FastAPI 静态文件挂载顺序导致 API 被拦截的问题
-
-**改进：**
-- 优化启动器端口检查逻辑
-- 完善打包部署文档
-- 添加详细的故障排查指南
 
 ---
 

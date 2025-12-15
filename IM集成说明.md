@@ -4,6 +4,26 @@
 
 根据 `docs/IM_basic.md` 文档，YCY 系统使用**腾讯云即时通讯（IM）**作为消息中转通道。
 
+### 架构演进
+
+**v1.0.1 更新（2025-12-16）**：
+
+架构从后端集中发送改为前端直接发送，提升安全性和响应速度：
+
+```
+旧架构（已废弃）：
+[CS2 游戏] → [Python 后端] → [Node.js IM 服务] → [腾讯 IM] → [YCY 设备端]
+
+新架构（当前）：
+[CS2 游戏] → [Python 后端] → [WebSocket 通知] → [前端] → [腾讯 IM SDK] → [YCY 设备端]
+```
+
+**架构优势**：
+- ✅ **更安全**：Token 仅在前端存储，不经过后端
+- ✅ **更快速**：前端直接发送，减少一次 HTTP 调用
+- ✅ **更可靠**：前端可以实时显示 IM 连接状态
+- ✅ **更灵活**：前端可以缓存和重试发送失败的消息
+
 ### 通信架构
 
 ```
@@ -260,29 +280,62 @@ Python 后端 → HTTP → Node.js 服务 → 腾讯 IM SDK → YCY 设备
 
 ## 当前状态
 
-### 已实现
+### 已实现（v1.0.1）
 
-✅ 加载 UID 和 Token
-✅ 调用 `/user/game_sign` 获取签名
-✅ UID 格式自动处理
-✅ 消息格式构造
-✅ 命令队列处理
+✅ **前端直接连接 IM** - Token 仅在前端存储，不经过后端
+✅ **加载 UID 和 Token** - 从前端配置读取
+✅ **调用 `/user/game_sign` 获取签名** - 前端直接调用
+✅ **UID 格式自动处理** - 系统自动添加/移除 `game_` 前缀
+✅ **消息格式构造** - 前端构造标准消息格式
+✅ **命令队列处理** - 前端缓存未发送的消息
+✅ **实时状态显示** - 前端显示 IM 连接状态和日志
 
-### 待实现
+### 实现位置
 
-⏳ 实际发送 IM 消息（需要选择上述方案之一）
+**前端 IM 客户端**：`frontend/src/utils/imClient.js`
 
-### 临时方案
+**核心功能**：
+- `connect(uid, token)` - 连接腾讯云 IM
+- `sendCommand(commandId)` - 发送游戏指令
+- `getStatus()` - 获取连接状态
+- 自动重连和消息队列管理
 
-当前系统会记录所有要发送的指令到日志：
+**使用示例**：
+```javascript
+import imClient from '@/utils/imClient'
 
+// 连接 IM
+const result = await imClient.connect('5', 'your_token')
+
+// 发送指令
+const result = await imClient.sendCommand('player_hurt')
+
+// 获取状态
+const status = imClient.getStatus()
 ```
-处理游戏指令: player_hurt
-准备发送指令: {"code":"game_cmd","id":"player_hurt","token":"xxx"}
-✓ 指令已准备发送
-  目标用户: 5
-  消息内容: {"code":"game_cmd","id":"player_hurt","token":"xxx"}
+
+### 已废弃（旧架构）
+
+❌ **Node.js IM 服务桥接** - 已不再需要，前端直接发送
+❌ **后端 HTTP 调用 IM 服务** - 已移除，减少中间环节
+
+### 架构对比
+
+**旧架构（复杂）**：
 ```
+游戏事件 → Python 后端 → HTTP 调用 → Node.js 服务 → 腾讯 IM → 设备
+```
+
+**新架构（简洁）**：
+```
+游戏事件 → Python 后端 → WebSocket → 前端 → 腾讯 IM SDK → 设备
+```
+
+**优势**：
+- 减少一次 HTTP 调用，延迟降低
+- Token 不经过后端，安全性提升
+- 前端可以实时显示发送状态
+- 消息队列管理更灵活
 
 ## 测试步骤
 

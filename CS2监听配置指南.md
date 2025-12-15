@@ -70,7 +70,7 @@ gamestate_integration_ycy.cfg
 ```cfg
 "YCY IM Integration"
 {
-    "uri" "http://localhost:8000/api/cs2-event"
+    "uri" "http://localhost:8001/api/cs2-event"
     "timeout" "5.0"
     "buffer" "0.1"
     "throttle" "0.1"
@@ -92,7 +92,7 @@ gamestate_integration_ycy.cfg
 
 | 参数 | 说明 | 推荐值 |
 |------|------|--------|
-| `uri` | 后端接收数据的 URL | `http://localhost:8000/api/cs2-event` |
+| `uri` | 后端接收数据的 URL | `http://localhost:8001/api/cs2-event` |
 | `timeout` | 请求超时时间（秒） | `5.0` |
 | `buffer` | 数据缓冲时间（秒） | `0.1` |
 | `throttle` | 数据发送间隔（秒） | `0.1` |
@@ -279,7 +279,7 @@ python main_server.py
 **检查项**:
 1. ✅ cfg 文件是否在正确的目录
 2. ✅ cfg 文件名是否以 `gamestate_integration_` 开头
-3. ✅ URI 是否正确（`http://localhost:8000/api/cs2-event`）
+3. ✅ URI 是否正确（`http://localhost:8001/api/cs2-event`）
 4. ✅ 后端服务是否正在运行
 5. ✅ 防火墙是否阻止了连接
 6. ✅ CS2 游戏是否已重启（配置文件在游戏启动时读取）
@@ -332,7 +332,7 @@ python main_server.py
 如果后端不在本机：
 
 ```cfg
-"uri" "http://192.168.1.100:8000/api/cs2-event"
+"uri" "http://192.168.1.100:8001/api/cs2-event"
 ```
 
 ### 多个监听器
@@ -360,7 +360,6 @@ gamestate_integration_overlay.cfg
 ## 📚 参考资料
 
 - [Valve GSI 官方文档](https://developer.valvesoftware.com/wiki/Counter-Strike:_Global_Offensive_Game_State_Integration)
-- [CS2 GSI 数据结构](https://github.com/antonpup/CounterStrike-GSI)
 
 ---
 
