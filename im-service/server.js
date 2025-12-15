@@ -1,0 +1,394 @@
+import TencentCloudChat from '@tencentcloud/chat';
+import express from 'express';
+import cors from 'cors';
+import { promises as fs } from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const app = express();
+const PORT = 3001;
+
+// 中间件
+app.use(cors());
+app.use(express.json());
+
+// IM 客户端状态
+let chat = null;
+let isReady = false;
+let config = {
+  uid: null,
+  userId: null,
+  token: null,
+  appId: null,
+  sign: null
+};
+
+const API_BASE = 'https://suo.jiushu1234.com/api.php';
+const STATE_FILE = path.resolve(__dirname, '..', 'state.json');
+
+// 日志函数
+function log(level, ...args) {
+  const timestamp = new Date().toISOString();
+  console.log(`[${timestamp}] [${level}]`, ...args);
+}
+
+// 加载配置
+async function loadState() {
+  try {
+    const data = await fs.readFile(STATE_FILE, 'utf-8');
+    const state = JSON.parse(data);
+
+    if (!state.uid || !state.token) {
+      log('WARN', 'state.json 缺少 uid 或 token');
+      return false;
+    }
+
+    // 处理 UID 格式
+    const rawUid = state.uid.trim();
+    if (rawUid.startsWith('game_')) {
+      config.userId = rawUid.replace('game_', '');
+      config.uid = `game_${config.userId}`;
+    } else {
+      config.userId = rawUid;
+      config.uid = `game_${rawUid}`;
+    }
+
+    config.token = state.token;
+    log('INFO', `已加载配置: UID=${config.uid}, UserID=${config.userId}`);
+    return true;
+  } catch (error) {
+    log('ERROR', '加载配置失败:', error.message);
+    return false;
+  }
+}
+
+// 请求 IM 签名
+async function requestGameSign() {
+  try {
+    const url = `${API_BASE}/user/game_sign`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        uid: config.uid,
+        token: config.token
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const result = await response.json();
+    if (result.code !== 1 || !result.data) {
+      throw new Error(`API 返回错误: ${result.msg || 'Unknown error'}`);
+    }
+
+    config.appId = result.data.appid;
+    config.sign = result.data.sign;
+    log('INFO', '✓ 获取 IM 签名成功');
+    return true;
+  } catch (error) {
+    log('ERROR', '✗ 获取 IM 签名失败:', error.message);
+    return false;
+  }
+}
+
+// 初始化 IM
+async function initIM() {
+  try {
+    log('INFO', '正在初始化 IM 客户端...');
+
+    // 加载配置
+    const loaded = await loadState();
+    if (!loaded) {
+      log('ERROR', '配置加载失败，无法初始化 IM');
+      return false;
+    }
+
+    // 获取签名
+    const signOk = await requestGameSign();
+    if (!signOk) {
+      log('ERROR', '获取签名失败，无法初始化 IM');
+      return false;
+    }
+
+    // 销毁旧实例
+    if (chat) {
+      try {
+        await chat.logout();
+        await chat.destroy();
+      } catch (e) {
+        log('WARN', '销毁旧实例失败:', e.message);
+      }
+    }
+
+    // 创建 IM 实例
+    chat = TencentCloudChat.create({
+      SDKAppID: parseInt(config.appId)
+    });
+
+    // 设置日志级别
+    chat.setLogLevel(1); // 0: 普通, 1: 发布, 2: 告警, 3: 错误
+
+    // 注册事件监听
+    chat.on(TencentCloudChat.EVENT.SDK_READY, () => {
+      isReady = true;
+      log('INFO', '✓ IM SDK 就绪');
+      log('INFO', `当前登录用户: ${chat.getLoginUser()}`);
+    });
+
+    chat.on(TencentCloudChat.EVENT.SDK_NOT_READY, () => {
+      isReady = false;
+      log('WARN', '⚠ IM SDK 未就绪');
+    });
+
+    chat.on(TencentCloudChat.EVENT.KICKED_OUT, async () => {
+      isReady = false;
+      log('WARN', '⚠ IM 被踢下线，5秒后重连...');
+      setTimeout(() => {
+        initIM().catch(e => log('ERROR', '重连失败:', e));
+      }, 5000);
+    });
+
+    chat.on(TencentCloudChat.EVENT.NET_STATE_CHANGE, (event) => {
+      log('INFO', '网络状态变化:', event.data.state);
+    });
+
+    chat.on(TencentCloudChat.EVENT.MESSAGE_RECEIVED, (event) => {
+      log('INFO', '📩 收到消息:', event.data.length, '条');
+    });
+
+    chat.on(TencentCloudChat.EVENT.ERROR, (event) => {
+      log('ERROR', 'IM 错误:', event.data);
+    });
+
+    // 登录 IM
+    log('INFO', '正在登录 IM...');
+    const loginRes = await chat.login({
+      userID: config.uid,
+      userSig: config.sign
+    });
+
+    if (loginRes.data?.repeatLogin) {
+      log('WARN', '重复登录:', loginRes.data.errorInfo);
+    }
+
+    // 等待 SDK 就绪
+    await waitReady(15000);
+
+    log('INFO', '✓ IM 客户端初始化成功');
+    log('INFO', `  UID: ${config.uid}`);
+    log('INFO', `  UserID: ${config.userId}`);
+    log('INFO', `  AppID: ${config.appId}`);
+    return true;
+  } catch (error) {
+    log('ERROR', '✗ IM 初始化失败:', error.message);
+    isReady = false;
+    return false;
+  }
+}
+
+// 等待 SDK 就绪
+function waitReady(timeout = 15000) {
+  if (isReady) return Promise.resolve();
+
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      cleanup();
+      reject(new Error('等待 SDK_READY 超时'));
+    }, timeout);
+
+    const onReady = () => {
+      isReady = true;
+      cleanup();
+      resolve();
+    };
+
+    const cleanup = () => {
+      clearTimeout(timer);
+      if (chat) {
+        chat.off(TencentCloudChat.EVENT.SDK_READY, onReady);
+      }
+    };
+
+    if (chat) {
+      chat.on(TencentCloudChat.EVENT.SDK_READY, onReady);
+    }
+  });
+}
+
+// 发送 IM 消息
+async function sendIMMessage(commandId) {
+  if (!chat || !isReady) {
+    throw new Error('IM 未就绪');
+  }
+
+  try {
+    // 构造消息内容
+    const messageText = JSON.stringify({
+      code: 'game_cmd',
+      id: commandId,
+      token: config.token
+    });
+
+    // 创建文本消息
+    const message = chat.createTextMessage({
+      to: config.userId,
+      conversationType: TencentCloudChat.TYPES.CONV_C2C,
+      payload: {
+        text: messageText
+      }
+    });
+
+    // 发送消息
+    const sendRes = await chat.sendMessage(message);
+
+    log('INFO', '✓ 指令发送成功:', commandId);
+    return {
+      success: true,
+      message: '指令发送成功',
+      data: sendRes
+    };
+  } catch (error) {
+    log('ERROR', '✗ 指令发送失败:', error.message);
+    throw error;
+  }
+}
+
+// API 路由
+
+// 健康检查
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    imReady: isReady,
+    uid: config.uid,
+    userId: config.userId
+  });
+});
+
+// 获取状态
+app.get('/api/status', (req, res) => {
+  res.json({
+    isReady,
+    config: {
+      uid: config.uid,
+      userId: config.userId,
+      appId: config.appId,
+      hasToken: !!config.token,
+      hasSign: !!config.sign
+    }
+  });
+});
+
+// 发送指令
+app.post('/api/send-command', async (req, res) => {
+  try {
+    const { commandId } = req.body;
+
+    if (!commandId) {
+      return res.status(400).json({
+        success: false,
+        message: '缺少 commandId 参数'
+      });
+    }
+
+    if (!isReady) {
+      return res.status(503).json({
+        success: false,
+        message: 'IM 未就绪'
+      });
+    }
+
+    const result = await sendIMMessage(commandId);
+    res.json(result);
+  } catch (error) {
+    log('ERROR', 'API 错误:', error.message);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+});
+
+// 重新初始化
+app.post('/api/reinit', async (req, res) => {
+  try {
+    log('INFO', '收到重新初始化请求');
+    const success = await initIM();
+    res.json({
+      success,
+      message: success ? 'IM 重新初始化成功' : 'IM 重新初始化失败'
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+});
+
+// 启动服务器
+async function startServer() {
+  // 初始化 IM
+  await initIM();
+
+  // 启动 HTTP 服务器
+  app.listen(PORT, () => {
+    log('INFO', '='.repeat(60));
+    log('INFO', 'CS2 IM 服务已启动');
+    log('INFO', `HTTP 服务: http://localhost:${PORT}`);
+    log('INFO', `健康检查: http://localhost:${PORT}/health`);
+    log('INFO', `状态查询: http://localhost:${PORT}/api/status`);
+    log('INFO', '='.repeat(60));
+  });
+
+  // 定期心跳
+  setInterval(() => {
+    if (isReady) {
+      log('DEBUG', '心跳: IM 连接正常');
+    } else {
+      log('WARN', '心跳: IM 未就绪');
+    }
+  }, 30000);
+}
+
+// 错误处理
+process.on('unhandledRejection', (reason) => {
+  const msg = String(reason?.message || reason || '');
+  const code = (reason && (reason.code ?? reason?.data?.code)) ?? undefined;
+  if (code === 2801 || /请求超时/.test(msg)) return;
+  log('ERROR', 'unhandledRejection:', reason);
+});
+
+process.on('uncaughtException', (err) => {
+  const msg = String(err?.message || err || '');
+  const code = (err && (err.code ?? err?.data?.code)) ?? undefined;
+  if (code === 2801 || /请求超时/.test(msg)) return;
+  log('ERROR', 'uncaughtException:', err);
+});
+
+// 优雅退出
+process.on('SIGINT', async () => {
+  log('INFO', '\n正在关闭服务...');
+  if (chat) {
+    try {
+      await chat.logout();
+      await chat.destroy();
+      log('INFO', 'IM 客户端已关闭');
+    } catch (e) {
+      log('ERROR', '关闭 IM 客户端失败:', e.message);
+    }
+  }
+  process.exit(0);
+});
+
+// 启动
+startServer().catch(error => {
+  log('ERROR', '启动失败:', error);
+  process.exit(1);
+});

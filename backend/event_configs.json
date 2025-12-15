@@ -1,0 +1,99 @@
+{
+  "player_hurt": {
+    "event_name": "玩家受伤",
+    "enabled": true,
+    "trigger_condition": {
+      "type": "health_decrease",
+      "min_damage": 1
+    },
+    "actions": [
+      {
+        "type": "send_command",
+        "command": "player_hurt",
+        "params": {
+          "damage_amount": "calculated"
+        }
+      }
+    ],
+    "description": "玩家血量减少时发送指令"
+  },
+  "player_death": {
+    "event_name": "玩家死亡",
+    "enabled": true,
+    "trigger_condition": {
+      "type": "health_zero"
+    },
+    "actions": [
+      {
+        "type": "send_command",
+        "command": "player_death",
+        "params": {}
+      }
+    ],
+    "description": "玩家死亡时发送指令"
+  },
+  "player_flashed": {
+    "event_name": "闪光弹致盲",
+    "enabled": true,
+    "trigger_condition": {
+      "type": "flashed",
+      "min_value": 1
+    },
+    "actions": [
+      {
+        "type": "send_command",
+        "command": "player_flashed",
+        "params": {}
+      }
+    ],
+    "description": "被闪光弹致盲时发送指令"
+  },
+  "player_smoked": {
+    "event_name": "烟雾弹影响",
+    "enabled": true,
+    "trigger_condition": {
+      "type": "smoked",
+      "min_value": 1
+    },
+    "actions": [
+      {
+        "type": "send_command",
+        "command": "player_smoked",
+        "params": {}
+      }
+    ],
+    "description": "在烟雾中时发送指令"
+  },
+  "player_burning": {
+    "event_name": "燃烧伤害",
+    "enabled": true,
+    "trigger_condition": {
+      "type": "burning",
+      "min_value": 1
+    },
+    "actions": [
+      {
+        "type": "send_command",
+        "command": "player_burning",
+        "params": {}
+      }
+    ],
+    "description": "被火焰燃烧时发送指令"
+  },
+  "round_end": {
+    "event_name": "回合结束",
+    "enabled": true,
+    "trigger_condition": {
+      "type": "round_phase",
+      "value": "over"
+    },
+    "actions": [
+      {
+        "type": "send_command",
+        "command": "round_end",
+        "params": {}
+      }
+    ],
+    "description": "回合结束时发送指令"
+  }
+}
