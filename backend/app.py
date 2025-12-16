@@ -1,7 +1,6 @@
 import asyncio
 import json
 import sys
-import os
 from typing import Dict, List, Optional
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
