@@ -27,6 +27,103 @@ def check_port(port):
     sock.close()
     return result == 0
 
+def get_pid_using_port(port):
+    """获取占用指定端口的进程 PID"""
+    if sys.platform == 'win32':
+        try:
+            # 使用 netstat 查找占用端口的进程
+            result = subprocess.run(
+                ['netstat', '-ano'],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+
+            if result.returncode == 0:
+                lines = result.stdout.split('\n')
+                for line in lines:
+                    if f':{port}' in line and 'LISTENING' in line:
+                        # 提取 PID（最后一列）
+                        parts = line.split()
+                        if len(parts) >= 5:
+                            try:
+                                pid = int(parts[-1])
+                                return pid
+                            except ValueError:
+                                continue
+        except Exception as e:
+            print(f"  ⚠ 查找端口占用进程失败: {e}")
+    else:
+        # Linux/Mac 使用 lsof
+        try:
+            result = subprocess.run(
+                ['lsof', '-ti', f':{port}'],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                return int(result.stdout.strip().split()[0])
+        except Exception as e:
+            print(f"  ⚠ 查找端口占用进程失败: {e}")
+
+    return None
+
+def kill_process_by_pid(pid):
+    """根据 PID 终止进程"""
+    if sys.platform == 'win32':
+        try:
+            # Windows: 使用 taskkill
+            result = subprocess.run(
+                ['taskkill', '/F', '/PID', str(pid)],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            return result.returncode == 0
+        except Exception as e:
+            print(f"  ⚠ 终止进程失败: {e}")
+            return False
+    else:
+        # Linux/Mac: 使用 kill
+        try:
+            os.kill(pid, signal.SIGKILL)
+            return True
+        except Exception as e:
+            print(f"  ⚠ 终止进程失败: {e}")
+            return False
+
+def cleanup_port(port, port_name):
+    """清理占用指定端口的进程"""
+    if check_port(port):
+        print(f"⚠ 检测到端口 {port} ({port_name}) 被占用")
+        pid = get_pid_using_port(port)
+
+        if pid:
+            print(f"  找到占用进程 PID: {pid}")
+            print(f"  正在终止进程...")
+
+            if kill_process_by_pid(pid):
+                print(f"  ✓ 已终止占用端口 {port} 的进程")
+                time.sleep(1)  # 等待端口释放
+
+                # 再次检查端口是否已释放
+                if check_port(port):
+                    print(f"  ⚠ 端口 {port} 仍被占用，可能需要手动处理")
+                    return False
+                else:
+                    print(f"  ✓ 端口 {port} 已释放")
+                    return True
+            else:
+                print(f"  ❌ 无法终止进程 {pid}")
+                return False
+        else:
+            print(f"  ⚠ 无法找到占用端口的进程")
+            print(f"  提示: 请手动检查并关闭占用端口 {port} 的程序")
+            return False
+
+    return True
+
 def wait_for_backend_ready(max_wait=30):
     """等待后端服务完全启动"""
     print("等待后端服务就绪...")
@@ -188,6 +285,29 @@ def main():
         sys.exit(1)
 
     print("✓ 文件检查完成")
+    print()
+
+    # 检查并清理端口占用
+    print("检查端口占用...")
+    ports_ok = True
+
+    # 清理 IM 服务端口 (3001)
+    if not cleanup_port(3001, "IM 服务"):
+        ports_ok = False
+
+    # 清理后端服务端口 (8001)
+    if not cleanup_port(8001, "后端服务"):
+        ports_ok = False
+
+    if not ports_ok:
+        print()
+        print("❌ 端口清理失败，无法启动服务")
+        print("   请手动关闭占用端口的程序后重试")
+        input("\n按回车键退出...")
+        sys.exit(1)
+
+    if not check_port(3001) and not check_port(8001):
+        print("✓ 端口检查完成，所有端口可用")
     print()
 
     # 启动 IM 服务
