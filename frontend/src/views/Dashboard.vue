@@ -111,10 +111,6 @@
                       <template #icon><ThunderboltOutlined /></template>
                     </a-button>
                   </a-tooltip>
-                  <a-button type="link" size="small" @click="editEvent(record)">编辑</a-button>
-                  <a-popconfirm title="确定删除?" @confirm="deleteEvent(record.id)">
-                    <a-button type="link" danger size="small">删除</a-button>
-                  </a-popconfirm>
                 </a-space>
               </template>
             </template>
@@ -165,41 +161,6 @@
           <a-input-password
             v-model:value="configForm.token"
             placeholder="请输入 Token"
-          />
-        </a-form-item>
-      </a-form>
-    </a-modal>
-
-    <!-- 事件编辑模态框 -->
-    <a-modal
-      v-model:open="eventModalVisible"
-      :title="isEdit ? '编辑事件' : '创建事件'"
-      width="700px"
-      @ok="handleEventSubmit"
-    >
-      <a-form :label-col="{ span: 6 }" :wrapper-col="{ span: 18 }">
-        <a-form-item label="事件ID" v-if="!isEdit">
-          <a-input v-model:value="eventForm.event_id" placeholder="例如: custom_event_1" />
-        </a-form-item>
-        <a-form-item label="事件名称">
-          <a-input v-model:value="eventForm.event_name" placeholder="例如: 玩家受伤" />
-        </a-form-item>
-        <a-form-item label="启用状态">
-          <a-switch v-model:checked="eventForm.enabled" />
-        </a-form-item>
-        <a-form-item label="触发类型">
-          <a-select v-model:value="eventForm.trigger_condition.type">
-            <a-select-option value="health_decrease">血量减少</a-select-option>
-            <a-select-option value="health_zero">血量归零</a-select-option>
-            <a-select-option value="flashed">闪光弹</a-select-option>
-            <a-select-option value="smoked">烟雾弹</a-select-option>
-            <a-select-option value="burning">燃烧伤害</a-select-option>
-          </a-select>
-        </a-form-item>
-        <a-form-item label="指令内容">
-          <a-input
-            v-model:value="eventForm.actions[0].command"
-            placeholder="例如: player_hurt"
           />
         </a-form-item>
       </a-form>
